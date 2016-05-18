@@ -1,4 +1,4 @@
-# UniversityVisualizaitonD3
+# UniversityVisualizationD3
 by Paul Glenn and Shir Nehma
 
 This is a mid-semester project for the Information Visualization course at the UC Berkeley School of Information, taught by Prof. Marti Hearst.
