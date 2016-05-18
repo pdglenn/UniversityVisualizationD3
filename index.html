@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
+<link rel="stylesheet" href="https://rawgit.com/tpreusse/radar-chart-d3/master/src/radar-chart.css">
+<link rel="stylesheet" href="http://code.jquery.com/ui/1.9.2/themes/base/jquery-ui.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chosen/1.4.2/chosen.css">
+<style>
+
+body {
+  padding: 20px;
+}
+
+svg {
+  font: 10px sans-serif;
+  padding-top: 20px;
+}
+
+tooltip {
+  font: 12px sans-serif;
+  background-color: #D3D3D3;
+  color: #001400;
+          margin: 10px;
+          height: 20px;
+          padding-right: 5px;
+          padding-left: 5px; 
+          padding-top: 5px;
+    border-radius:10px;
+}
+
+#title{
+  font: 24pt sans-serif;
+  padding: 10px;
+}
+
+#author{
+  font: 14pt sans-serif;
+  padding: 10px;
+}
+
+#instructions{
+  font: 12pt sans-serif;
+  padding: 10px;
+}
+
+#note{
+  font: 8pt sans-serif;
+  padding-left: 10px;
+}
+#about{
+  font: 10pt sans-serif;
+  padding:20px;
+}
+.background path {
+  fill: none;
+  stroke: #ddd;
+  shape-rendering: crispEdges;
+}
+
+.foreground path {
+  fill: none;
+  stroke: #74d576;
+  stroke-width:1;
+}
+
+.brush .extent {
+  fill-opacity: .3;
+  stroke: #fff;
+  shape-rendering: crispEdges;
+}
+
+.axis line,
+.axis path {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.axis text {
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+  cursor: move;
+}
+
+.radar-chart .area {
+  fill-opacity: 0.0;
+}
+.radar-chart.focus .area {
+  fill-opacity: 0.3;
+}
+.radar-chart.focus .area.focused {
+  fill-opacity: 0.9;
+}
+.area.university1, .university1 .circle {
+  fill: #1F77B4;
+  stroke: #1F77B4;
+}
+.area.university2, .university2 .circle {
+  fill: #FF7F0E;
+  stroke: #FF7F0E;
+}
+
+path.hovered{
+  stroke: #006400;
+  stroke-width: 4;
+}
+
+path.university1_line{
+  stroke: #1F77B4;
+  stroke-width: 3;
+  stroke-opacity: .7;
+}
+
+path.university1_line.hovered{
+  stroke: #1F77B4;
+  stroke-width: 4;
+  stroke-opacity: 1;
+}
+
+path.university2_line{
+  stroke: #FF7F0E;
+  stroke-width: 3;
+  stroke-opacity: .7;
+}
+
+path.university2_line.hovered{
+  stroke: #FF7F0E;
+  stroke-width: 4;
+  stroke-opacity: 1;
+}
+
+</style>
+
+<body>
+
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="radar-chart.js"></script> <!-- https://github.com/alangrafu/radar-chart-d3 -->
+<script src="bower_components/jquery/dist/jquery.min.js"></script>
+<script src="bower_components/chosen/chosen.jquery.js"></script>
+
+<!-- Setting up page layout -->
+  <title>2011 World University Rankings</title>
+  <div id="title"> 2011 World University Rankings </div>
+  <div id="author">by Shir Nehama and Paul Glenn</div>
+  <div id="instructions">This visualization displays data from the Times Higher Education 2011 World University Rankings. The data is provided by <a href="https://www.kaggle.com/mylesoneill/world-university-rankings">Kaggle</a>. Explore the universities in the parallel coordinates chart on the left, and select two universities for comparison in the radar chart with the drop downs on the right.</div>
+  <div id="note">Note: Null values for Income, Staff to Student Ratio, and International Score in the data were given the average value of that dimension.</div>
+
+
+  <div id="container" style="width: 1300px; height: 700px;">
+    <div id="parallel" style="width: 700px; height: 500px; float: left;"></div>
+    <div id="radar" style="width: 600px; height: 500px; float: left;">
+      <div id="chart" style="width: 600px; height: 600px;"></span>
+    </div>
+  </div>
+  <div id="info" style="width: 1300px; height: 700px;">
+    <div id="about" style="float:left;"> 
+      University Total Score - total score for university, used to determine rank. <p></p>
+      Teaching Score- university score for teaching (the learning environment).<p></p>
+      Research Score- university score for research (volume, income and reputation).<p></p>
+      Citation Score - university score for citations (research influence).<p></p>
+      International - university score international outlook (staff, students, research).<p></p>
+      Income Score - university score for industry income (knowledge transfer).<p></p>
+      Staff to Student Ratio- Number of students divided by number of staff.<p></p>
+   </div>
+   <div id="legend" style="float:right; padding-right: 100px;"></div>
+
+<script>
+
+//Code Contributions
+//Parallel Coordinates: http://bl.ocks.org/jasondavies/1341281
+//Hover features: http://people.ischool.berkeley.edu/~japple/jeopardy/ 
+
+//Shir's Code
+var tooltip = d3.select("body")
+    .append("tooltip")
+    .style("position", "absolute")
+    .style("z-index", "10")
+    .style("visibility", "hidden")
+    .attr("class","sc_tooltip");
+//
+
+var margin = {top: 30, right: 10, bottom: 60, left: 10},
+    width = 700 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+var x = d3.scale.ordinal().rangePoints([0, width], 1),
+    y = {},
+    dragging = {};
+
+var line = d3.svg.line(),
+    axis = d3.svg.axis().orient("left"),
+    background,
+    foreground;
+
+// var comment = d3.select("#parallel").append("comment")
+//   .attr("height",50)
+//   .attr("width", width + margin.left + margin.right)
+//   .append("text")
+//       .style("text-anchor", "middle")
+//       .attr("y", -9)
+//       .text("Note: Null values for Income, Staff to Student Ratio, and International Score in the data were given the average value of that dimension.");
+
+var svg = d3.select("#parallel").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+d3.csv("parallel_name.csv", function(error, data) {
+
+  // Extract the list of dimensions and create a scale for each.
+
+  x.domain(dimensions = d3.keys(data[0]).filter(function(d) {
+    return d != "Name" && d != "key" && d != "rank" && (y[d] = d3.scale.linear()
+        .domain(d3.extent(data, function(p) { return +p[d]; }))
+        .range([height, 0]));
+  }));
+
+  // Add grey background lines for context.
+  background = svg.append("g")
+      .attr("class", "background")
+    .selectAll("path")
+      .data(data)
+    .enter().append("path")
+      .attr("d", path);
+
+  //Shir code for hover feature
+  // Add blue foreground lines for focus.
+
+  foreground = svg.append("g")
+      .attr("class", "foreground")
+    .selectAll("path")
+      .data(data)
+    .enter().append("path")
+      .attr("d", path)
+      .attr("id", function(dd){
+        return dd.Name.replace(/ /g,"_");
+      })
+      .on("mouseover",function(n){
+        d3.select(this)//.transition().duration(150)
+          .classed("hovered", true)
+        tooltip.text(n.rank + ". " + n.Name);
+          return tooltip.style("visibility","visible");
+      })
+      .on("mousemove", function(){return tooltip.style("top", (event.pageY-10)+"px").style("left",(event.pageX+10)+"px");})
+      .on("mouseout",function(d){
+        d3.select(this)//.transition().duration(150)
+          .classed("hovered", false);
+        return tooltip.style("visibility","hidden");
+      });
+
+  // Add a group element for each dimension.
+
+  var g = svg.selectAll(".dimension")
+      .data(dimensions)
+    .enter().append("g")
+      .attr("class", "dimension")
+      .attr("transform", function(d) { return "translate(" + x(d) + ")"; })
+      .call(d3.behavior.drag()
+        .origin(function(d) { return {x: x(d)}; })
+        .on("dragstart", function(d) {
+          dragging[d] = x(d);
+          background.attr("visibility", "hidden");
+        })
+        .on("drag", function(d) {
+          dragging[d] = Math.min(width, Math.max(0, d3.event.x));
+          foreground.attr("d", path);
+          dimensions.sort(function(a, b) { return position(a) - position(b); });
+          x.domain(dimensions);
+          g.attr("transform", function(d) { return "translate(" + position(d) + ")"; })
+        })
+        .on("dragend", function(d) {
+          delete dragging[d];
+          transition(d3.select(this)).attr("transform", "translate(" + x(d) + ")");
+          transition(foreground).attr("d", path);
+          background
+              .attr("d", path)
+            .transition()
+              .delay(500)
+              .duration(0)
+              .attr("visibility", null);
+        }));
+
+  // Add an axis and title.
+  g.append("g")
+      .attr("class", "axis")
+      .each(function(d) { d3.select(this).call(axis.scale(y[d])); })
+    .append("text")
+      .style("text-anchor", "middle")
+      .attr("y", -9)
+      .text(function(d) { return d; });
+
+  // Add and store a brush for each axis.
+  g.append("g")
+      .attr("class", "brush")
+      .each(function(d) {
+        d3.select(this).call(y[d].brush = d3.svg.brush().y(y[d]).on("brushstart", brushstart).on("brush", brush));
+      })
+    .selectAll("rect")
+      .attr("x", -8)
+      .attr("width", 16);
+});
+
+function position(d) {
+  var v = dragging[d];
+  return v == null ? x(d) : v;
+}
+
+function transition(g) {
+  return g.transition().duration(500);
+}
+
+// Returns the path for a given data point.
+function path(d) {
+  return line(dimensions.map(function(p) { return [position(p), y[p](d[p])]; }));
+}
+
+function brushstart() {
+  d3.event.sourceEvent.stopPropagation();
+}
+
+// Handles a brush event, toggling the display of foreground lines.
+function brush() {
+  var actives = dimensions.filter(function(p) { return !y[p].brush.empty(); }),
+      extents = actives.map(function(p) { return y[p].brush.extent(); });
+  foreground.style("display", function(d) {
+    return actives.every(function(p, i) {
+      return extents[i][0] <= d[p] && d[p] <= extents[i][1];
+    }) ? null : "none";
+  });
+}
+
+</script>
+
+<!-- Radar Chart and Dropdown Dispatch -->
+
+<script>
+// Radar chart configuration
+RadarChart.defaultConfig.radius = 3;
+RadarChart.defaultConfig.w = 500;
+RadarChart.defaultConfig.h = 500;
+RadarChart.defaultConfig.tooltipColor = "white";
+RadarChart.defaultConfig.backgroundTooltipOpacity = "0.7";
+
+var data = [
+  {
+    className: "Harvard University", // optional can be used for styling
+    axes: [
+      {axis: "Teaching Score", value: 99.7}, 
+      {axis: "International Score", value: 72.4}, 
+      {axis: "Research Score", value: 98.7},  
+      {axis: "Citation Score", value: 98.8},  
+      {axis: "Income Score", value: 34.5}
+    ]
+  },
+  {
+    className: "California Institute of Technology", // optional can be used for styling
+    axes: [
+      {axis: "Teaching Score", value: 99.7}, 
+      {axis: "International Score", value: 72.4}, 
+      {axis: "Research Score", value: 98.7},  
+      {axis: "Citation Score", value: 98.8},  
+      {axis: "Income Score", value: 34.5}
+      ]
+    }
+];
+
+// This function is likely useless but not using it breaks a bunch of other things
+function dataset() {
+  return data.map(function(d) {
+    return {
+      className: d.className,
+      axes: d.axes.map(function(axis) {
+        return {axis: axis.axis, value: axis.value};
+      })
+    };
+  });
+}
+
+// Move to front for line chart
+// http://bl.ocks.org/eesur/4e0a69d57d3bfc8a82c2
+d3.selection.prototype.moveToFront = function() {  
+  return this.each(function(){
+    this.parentNode.appendChild(this);
+  });
+};
+
+
+// Dropdown menus for selecting universities
+// Adapted from https://bl.ocks.org/mbostock/5872848
+
+var dispatch = d3.dispatch("load", "statechange1", "statechange2");
+d3.csv("data4.csv", function(error, univs) {
+  if (error) throw error;
+  var univById = d3.map();
+  univs.forEach(function(d) { univById.set(d.Name, d); });
+  dispatch.load(univById);
+  dispatch.statechange1(univById.get("Harvard University"));
+  dispatch.statechange2(univById.get("California Institute of Technology"));
+});
+
+dispatch.on("load.menu", function(univById) {
+  // University 1 legend box
+  d3.select("#legend")
+    .append("br")
+    .attr("style", "clear:both");
+
+  var legend1 = d3.select("#legend")
+    .append("div")
+      .attr("style", "float: left; height: 50px; width: 40px; margin-top:-25px;")
+      .append("svg")
+        .attr("width", 30)
+        .attr("height", 30)
+        .append("rect")
+          .attr("width", 30)
+          .attr("height", 30)
+          .attr("fill", "#1F77B4")
+          .attr("id", "legend1")
+
+
+  // University 1 Selector
+  var select1 = d3.select("#legend")
+    .append("div")
+      .attr("style", "float: left; height: 50px;")
+      .append("select")
+        .attr("id", "select1")
+        .on("change", function() { dispatch.statechange1(univById.get(this.value)); });
+
+  select1.selectAll("option")
+    .data(univById.values())
+    .enter()
+      .append("option")
+        .attr("value", function(d) { return d.Name; })
+        .text(function(d) { return d.rank + ". " + d.Name; });
+
+  // Line break between selection boxes
+  d3.select("#legend")
+    .append("br")
+      .attr("style", "clear:both");
+
+  // University 2 selection box
+  var legend2 = d3.select("#legend")
+    .append("div")
+      .attr("style", "float: left; height: 50px; width: 40px; margin-top:-25px;")
+      .append("svg")
+        .attr("width", 30)
+        .attr("height", 30)
+        .append("rect")
+          .attr("width", 30)
+          .attr("height", 30)
+          .attr("fill", "#FF7F0E")
+          .attr("id", "legend2")
+
+  var select2 = d3.select("#legend")
+    .append("div")
+      .attr("style", "float: left; height: 50px;")
+      .append("select")
+        .attr("id", "select2")
+        .classed("chzn-select", true)
+        .on("change", function() { dispatch.statechange2(univById.get(this.value)); });
+
+
+  select2.selectAll("option")
+    .data(univById.values())
+    .enter()
+    .append("option")
+      .attr("value", function(d) { return d.Name; })
+      .text(function(d) { return d.rank + ". " + d.Name; });  
+
+  // Convert drop downs to chosen components to allow search
+  // http://harvesthq.github.io/chosen/
+  // http://stackoverflow.com/questions/8980131/changing-selection-in-a-select-with-the-chosen-plugin
+  $("#select1").chosen().change(function() {
+    dispatch.statechange1(univById.get(this.value));
+  });
+
+  $("#select1").val("Harvard University").trigger('chosen:updated');
+
+
+  $("#select2").chosen().change(function() {
+    dispatch.statechange2(univById.get(this.value));
+  });
+
+  $("#select2").val("California Institute of Technology").trigger('chosen:updated');
+
+  // Change of state on university 1
+  dispatch.on("statechange1.menu", function(univ) {
+    select1.property("value", univ.Name);
+
+    // Update the dataset with correct info for selected university
+    data[0] = {
+      className: univ.rank + ". " + univ.Name, 
+      axes: [
+        {axis: "Teaching Score", value: univ.teaching}, 
+        {axis: "International Score", value: univ.international}, 
+        {axis: "Research Score", value: univ.research},  
+        {axis: "Citations Score", value: univ.citations},  
+        {axis: "Income Score", value: univ.income}
+      ]
+    };
+
+    // Update the parallel coordinates to highlight selected university and move to front
+    d3.select("path.university1_line").classed("university1_line", false);
+
+    // Remove spaces from university name and convert to underscores to create id
+    // http://stackoverflow.com/questions/441018/replacing-spaces-with-underscores-in-javascript
+    d3.select(("#"+univ.Name).replace(/ /g,"_")).classed("university1_line", true);
+    d3.select(("#"+univ.Name).replace(/ /g,"_")).moveToFront();
+
+  });
+
+  // Change of state on university 2
+  dispatch.on("statechange2.menu", function(univ) {
+    select2.property("value", univ.Name);
+
+    data[1] = {
+      className: univ.rank + ". " + univ.Name,
+      axes: [
+        {axis: "Teaching Score", value: univ.teaching}, 
+        {axis: "International Score", value: univ.international}, 
+        {axis: "Research Score", value: univ.research},  
+        {axis: "Citations Score", value: univ.citations},  
+        {axis: "Income Score", value: univ.income}
+      ]
+    };
+
+    d3.select("path.university2_line").classed("university2_line", false);
+
+    d3.select(("#"+univ.Name).replace(/ /g,"_")).classed("university2_line", true);
+    d3.select(("#"+univ.Name).replace(/ /g,"_")).moveToFront();
+
+  });
+});
+
+// Loading the radar chart
+dispatch.on("load.radar", function(univById) {
+  var chart = RadarChart.chart();
+  var cfg = chart.config(); // retrieve default config
+
+  // Update the chart with new data when there's a state change
+  dispatch.on("statechange1.radar", function(d) {
+    RadarChart.draw("#chart", data);
+  });
+
+  dispatch.on("statechange2.radar", function(d) {
+    RadarChart.draw("#chart", data);
+  });
+
+});
+
+
+</script>
+
+</body>
