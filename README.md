@@ -9,5 +9,5 @@ The assignment was to visualize data from Kaggle's [World University Rankings](h
 
 Our take on the assignment differed from other groups in that we chose to integrate both charts into a single visualization with controls that not only chose which universities to include in the radar chart but also highlighted those universities in the parallel coordinates.
 
-A full write-up of the implementation is available as a PDF in this repository, and a live demo is available [here](http://people.ischool.berkeley.edu/~paul.glenn/i247s16/
+A full write-up of the implementation is available as a PDF in this repository, and a live demo is available [here](http://people.ischool.berkeley.edu/~paul.glenn/i247s16/UniversityVisualizationD3
 ).
